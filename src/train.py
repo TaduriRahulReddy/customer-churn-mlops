@@ -1,37 +1,57 @@
+
+
 import pandas as pd
+import joblib
+import mlflow
+import mlflow.sklearn
+
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
-import joblib
 
-# Load dataset
+# load data
 df = pd.read_csv("data/Customer-Churn.csv")
 
-# Encode categorical variables
-le = LabelEncoder()
-for col in df.select_dtypes(include="object").columns:
-    df[col] = le.fit_transform(df[col])
+# drop ID column
+df = df.drop("customerID", axis=1)
 
-# Features and target
+# encode target
+df["Churn"] = df["Churn"].map({"Yes":1, "No":0})
+
+# convert categorical features
+df = pd.get_dummies(df)
+
+
+
 X = df.drop("Churn", axis=1)
 y = df["Churn"]
 
-# Train/test split
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
-# Train model
-model = RandomForestClassifier()
-model.fit(X_train, y_train)
+# start mlflow experiment
+mlflow.set_experiment("customer_churn")
 
-# Predict
-preds = model.predict(X_test)
+with mlflow.start_run():
 
-# Evaluate
-accuracy = accuracy_score(y_test, preds)
-print("Model Accuracy:", accuracy)
+    model = RandomForestClassifier(n_estimators=100)
 
-# Save model
+    model.fit(X_train, y_train)
+
+    predictions = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, predictions)
+
+    # log parameters
+    mlflow.log_param("model_type", "RandomForest")
+    mlflow.log_param("n_estimators", 100)
+
+    # log metric
+    mlflow.log_metric("accuracy", accuracy)
+
+    # log model
+    mlflow.sklearn.log_model(model, "model")
+
+# save model locally
 joblib.dump(model, "models/churn_model.pkl")
+
+print("Model trained and saved.")
